@@ -88,6 +88,12 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		if containAudioTokens && containsAudioRatios {
 			service.PostAudioConsumeQuota(c, info, usage, "")
 		} else {
+			// ★ 新增：记录响应体
+			if common.LogResponseBodyEnabled {
+				if respBody := c.GetString("log_response_body"); respBody != "" {
+					// 响应体已经在流式处理或非流式处理中捕获
+				}
+			}
 			service.PostTextConsumeQuota(c, info, usage, nil)
 		}
 		return nil
@@ -211,6 +217,12 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 	if containAudioTokens && containsAudioRatios {
 		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
 	} else {
+		// ★ 新增：记录响应体
+		if common.LogResponseBodyEnabled {
+			if respBody := c.GetString("log_response_body"); respBody != "" {
+				// 响应体已经在流式处理或非流式处理中捕获
+			}
+		}
 		service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
 	}
 	return nil

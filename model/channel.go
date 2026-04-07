@@ -45,6 +45,7 @@ type Channel struct {
 	OtherInfo         string  `json:"other_info"`
 	Tag               *string `json:"tag" gorm:"index"`
 	Setting           *string `json:"setting" gorm:"type:text"` // 渠道额外设置
+	MaxBalance        float64 `json:"max_balance"`              // 限制单渠道限额
 	ParamOverride     *string `json:"param_override" gorm:"type:text"`
 	HeaderOverride    *string `json:"header_override" gorm:"type:text"`
 	Remark            *string `json:"remark" gorm:"type:varchar(255)" validate:"max=255"`
@@ -499,6 +500,9 @@ func (channel *Channel) Update() error {
 	if err != nil {
 		return err
 	}
+	if channel.MaxBalance <= channel.Balance && channel.Balance != 0 {
+		channel.Status = 2
+	}
 	DB.Model(channel).First(channel, "id = ?", channel.Id)
 	err = channel.UpdateAbilities(nil)
 	return err
@@ -765,6 +769,22 @@ func updateChannelUsedQuota(id int, quota int) {
 	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to update channel used quota: channel_id=%d, delta_quota=%d, error=%v", id, quota, err))
+	}
+	// ★ 新增：检查是否超过 max_balance 限额，超限则自动禁用渠道
+	if quota > 0 {
+		var channel Channel
+		if err := DB.Where("id = ?", id).First(&channel).Error; err == nil {
+			if channel.MaxBalance > 0 {
+				maxQuota := int64(channel.MaxBalance * 500000)
+				if channel.UsedQuota >= maxQuota {
+					DB.Model(&Channel{}).Where("id = ?", id).Update("status", 2)
+					common.SysLog(fmt.Sprintf("channel %d disabled: used_quota %d >= max_balance quota %d ($%.2f)",
+						id, channel.UsedQuota, maxQuota, channel.MaxBalance))
+					// 更新缓存
+					CacheUpdateChannelStatus(id, 2)
+				}
+			}
+		}
 	}
 }
 

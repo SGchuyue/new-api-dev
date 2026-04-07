@@ -138,6 +138,7 @@ export const useChannelsData = () => {
     STATUS: 'status',
     RESPONSE_TIME: 'response_time',
     BALANCE: 'balance',
+    MAXBALANCE: 'max_balance',  // 新增渠道限额查询
     PRIORITY: 'priority',
     WEIGHT: 'weight',
     OPERATE: 'operate',
@@ -178,6 +179,7 @@ export const useChannelsData = () => {
       [COLUMN_KEYS.STATUS]: true,
       [COLUMN_KEYS.RESPONSE_TIME]: true,
       [COLUMN_KEYS.BALANCE]: true,
+      [COLUMN_KEYS.MAXBALANCE]: true,  // ★ 新增
       [COLUMN_KEYS.PRIORITY]: true,
       [COLUMN_KEYS.WEIGHT]: true,
       [COLUMN_KEYS.OPERATE]: true,
@@ -466,6 +468,12 @@ export const useChannelsData = () => {
         if (data.weight < 0) data.weight = 0;
         res = await API.put('/api/channel/', data);
         break;
+      case 'max_balance':          // ★ 新增
+        if (value === '') return;  // ★ 新增
+        data.max_balance = parseFloat(value);  // ★ 新增
+        if (data.max_balance < 0) data.max_balance = 0;  // ★ 新增
+        res = await API.put('/api/channel/', data);  // ★ 新增
+        break;  // ★ 新增
       case 'enable_all':
         data.channel_info = record.channel_info;
         data.channel_info.multi_key_status_list = {};

@@ -208,6 +208,19 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
+		// ★ 新增：记录请求体
+		if common.LogRequestBodyEnabled {
+			if bytes, err := bodyStorage.Bytes(); err == nil {
+				// 限制大小，避免存入过大的请求体
+				maxLen := 10000 // 10KB
+				bodyStr := string(bytes)
+				if len(bodyStr) > maxLen {
+					bodyStr = bodyStr[:maxLen] + "...(truncated)"
+				}
+				c.Set("log_request_body", bodyStr)
+			}
+		}
+
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
 			newAPIError = relay.WssHelper(c, relayInfo)

@@ -83,11 +83,26 @@ export const useLogsData = () => {
     ? 'logs-billing-display-mode-admin'
     : 'logs-billing-display-mode-user';
 
+  
+  // Input/Output modal state
+const [showInputOutput, setShowInputOutput] = useState(false);
+const [inputOutputData, setInputOutputData] = useState(null);
+
+const openInputOutputModal = (log) => {
+  const other = getLogOther(log.other);
+  setInputOutputData({
+    requestBody: other?.request_body || '',
+    responseBody: other?.response_body || '',
+    modelName: log.model_name || '',
+  });
+  setShowInputOutput(true);
+  
   // Statistics state
   const [stat, setStat] = useState({
     quota: 0,
     token: 0,
   });
+};
 
   // Form state
   const [formApi, setFormApi] = useState(null);
@@ -872,6 +887,11 @@ export const useLogsData = () => {
     showParamOverrideModal,
     setShowParamOverrideModal,
     paramOverrideTarget,
+     // ★ 新增：Input/Output modal
+  showInputOutput,
+  setShowInputOutput,
+  inputOutputData,
+  openInputOutputModal,
 
     // Functions
     loadLogs,

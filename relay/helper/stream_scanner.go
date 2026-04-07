@@ -198,6 +198,15 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		for data := range dataChan {
 			sr.reset()
 			writeMutex.Lock()
+			// ★ 修复：用换行符拼接流式响应
+			if common.LogResponseBodyEnabled {
+				existing := c.GetString("log_response_body")
+				if existing == "" {
+					c.Set("log_response_body", data)
+				} else {
+					c.Set("log_response_body", existing+"\n"+data)
+				}
+			}
 			dataHandler(data, sr)
 			writeMutex.Unlock()
 			if sr.IsStopped() {
@@ -295,5 +304,13 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
 		logger.LogInfo(c, fmt.Sprintf("stream ended: %s", info.StreamStatus.Summary()))
 	} else {
 		logger.LogError(c, fmt.Sprintf("stream ended: %s, received=%d", info.StreamStatus.Summary(), info.ReceivedResponseCount))
+	}
+	// ★ 新增：截断过长的响应体
+	if common.LogResponseBodyEnabled {
+		if body := c.GetString("log_response_body"); body != "" {
+			if len(body) > 10000 {
+				c.Set("log_response_body", body[:10000]+"...(truncated)")
+			}
+		}
 	}
 }

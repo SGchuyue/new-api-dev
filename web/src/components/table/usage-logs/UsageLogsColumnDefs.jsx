@@ -885,6 +885,9 @@ export const getLogsColumns = ({
       fixed: 'right',
       width: 200,
       render: (text, record, index) => {
+        const other = getLogOther(record.other);
+        // --
+        const hasInputOutput = other?.request_body || other?.response_body;
         const detailSummary = getUsageLogDetailSummary(
           record,
           text,

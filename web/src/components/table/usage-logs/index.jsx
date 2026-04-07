@@ -29,6 +29,7 @@ import ParamOverrideModal from './modals/ParamOverrideModal';
 import { useLogsData } from '../../../hooks/usage-logs/useUsageLogsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import InputOutputModal from './modals/InputOutputModal';
 
 const LogsPage = () => {
   const logsData = useLogsData();
@@ -41,7 +42,8 @@ const LogsPage = () => {
       <UserInfoModal {...logsData} />
       <ChannelAffinityUsageCacheModal {...logsData} />
       <ParamOverrideModal {...logsData} />
-
+      //新增查询
+<InputOutputModal {...logsData} />
       {/* Main Content */}
       <CardPro
         type='type2'

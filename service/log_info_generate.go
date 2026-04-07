@@ -72,12 +72,32 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 
 	other["admin_info"] = adminInfo
 	appendRequestPath(ctx, relayInfo, other)
+	appendRequestBody(ctx, other)
+	appendResponseBody(ctx, other)
 	appendRequestConversionChain(relayInfo, other)
 	appendFinalRequestFormat(relayInfo, other)
 	appendBillingInfo(relayInfo, other)
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
 	return other
+}
+
+func appendRequestBody(ctx *gin.Context, other map[string]interface{}) {
+	if !common.LogRequestBodyEnabled {
+		return
+	}
+	if body := ctx.GetString("log_request_body"); body != "" {
+		other["request_body"] = body
+	}
+}
+
+func appendResponseBody(ctx *gin.Context, other map[string]interface{}) {
+	if !common.LogResponseBodyEnabled {
+		return
+	}
+	if body := ctx.GetString("log_response_body"); body != "" {
+		other["response_body"] = body
+	}
 }
 
 func appendParamOverrideInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {

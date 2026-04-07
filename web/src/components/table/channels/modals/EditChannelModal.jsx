@@ -185,6 +185,7 @@ const EditChannelModal = (props) => {
     groups: ['default'],
     priority: 0,
     weight: 0,
+    max_balance: 0,
     tag: '',
     multi_key_mode: 'random',
     // 渠道额外设置的默认值
@@ -1004,6 +1005,7 @@ const EditChannelModal = (props) => {
         (data.remark && data.remark.trim()) ||
         (data.priority && data.priority !== 0) ||
         (data.weight && data.weight !== 0) ||
+        (data.max_balance && data.max_balance !== 0) ||
         (data.proxy && data.proxy.trim()) ||
         (data.system_prompt && data.system_prompt.trim()) ||
         data.thinking_to_content ||
@@ -2450,6 +2452,19 @@ const EditChannelModal = (props) => {
                         min={0}
                         onNumberChange={(value) => handleInputChange('weight', value)}
                         style={{ width: '100%' }}
+                      />
+                    </Col>
+                     <Col span={12}>
+                      <Form.InputNumber
+                        field='max_balance'
+                        label={t('渠道限额')}
+                        placeholder={t('0 表示不限制')}
+                        min={0}
+                        precision={2}
+                        step={0.01}
+                        onNumberChange={(value) => handleInputChange('max_balance', value)}
+                        style={{ width: '100%' }}
+                        extraText={t('设置该渠道可消耗的最大金额，达到限额后自动停用，0 表示不限制')}
                       />
                     </Col>
                   </Row>

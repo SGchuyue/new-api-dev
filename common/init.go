@@ -19,6 +19,17 @@ var (
 	PrintVersion = flag.Bool("version", false, "print version and exit")
 	PrintHelp    = flag.Bool("help", false, "print help and exit")
 	LogDir       = flag.String("log-dir", "./logs", "specify the log directory")
+
+	// ★ 新增
+	LogRequestBody  = flag.Bool("log-request-body", true, "是否记录请求体")
+	LogResponseBody = flag.Bool("log-response-body", true, "是否记录响应体")
+)
+
+// 新增非流式响应存储
+// ★ 新增：解析 flag 到全局变量
+var (
+	LogRequestBodyEnabled  bool
+	LogResponseBodyEnabled bool
 )
 
 func printHelp() {
@@ -30,6 +41,10 @@ func printHelp() {
 
 func InitEnv() {
 	flag.Parse()
+
+	// ★ 新增：解析 flag 到全局变量
+	LogRequestBodyEnabled = *LogRequestBody
+	LogResponseBodyEnabled = *LogResponseBody
 
 	envVersion := os.Getenv("VERSION")
 	if envVersion != "" {
