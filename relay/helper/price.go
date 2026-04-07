@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -41,7 +42,14 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 		// normal group ratio
 		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
 	}
-
+	// 用户专属渠道倍率，优先级最高
+	if relayInfo.UserId > 0 && relayInfo.ChannelId > 0 {
+		if channelRatio, found := model.GetUserChannelRatio(relayInfo.UserId, relayInfo.ChannelId); found {
+			groupRatioInfo.GroupRatio = channelRatio
+			groupRatioInfo.GroupSpecialRatio = channelRatio
+			groupRatioInfo.HasSpecialRatio = true
+		}
+	}
 	return groupRatioInfo
 }
 

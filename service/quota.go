@@ -119,6 +119,12 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 	userGroupRatio, ok := ratio_setting.GetGroupGroupRatio(relayInfo.UserGroup, relayInfo.UsingGroup)
 	if ok {
 		actualGroupRatio = userGroupRatio
+		// 用户专属渠道倍率，优先级最高
+		if relayInfo.UserId > 0 && relayInfo.ChannelId > 0 {
+			if channelRatio, found := model.GetUserChannelRatio(relayInfo.UserId, relayInfo.ChannelId); found {
+				actualGroupRatio = channelRatio
+			}
+		}
 	}
 
 	quotaInfo := QuotaInfo{

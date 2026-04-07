@@ -27,6 +27,8 @@ import ModelSettingsVisualEditor from '../../pages/Setting/Ratio/ModelSettingsVi
 import ModelRatioNotSetEditor from '../../pages/Setting/Ratio/ModelRationNotSetEditor';
 import UpstreamRatioSync from '../../pages/Setting/Ratio/UpstreamRatioSync';
 
+import UserChannelRatioSettings from '../../pages/Setting/Ratio/UserChannelRatioSettings';
+
 import { API, showError, toBoolean } from '../../helpers';
 
 const RatioSetting = () => {
@@ -112,6 +114,9 @@ const RatioSetting = () => {
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('上游倍率同步')} itemKey='upstream_sync'>
             <UpstreamRatioSync options={inputs} refresh={onRefresh} />
+          </Tabs.TabPane>
+          <Tabs.TabPane tab={t('用户专属倍率')} itemKey='user_ratio'>
+            <UserChannelRatioSettings options={inputs} refresh={onRefresh} />
           </Tabs.TabPane>
         </Tabs>
       </Card>
