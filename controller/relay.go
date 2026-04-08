@@ -212,7 +212,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if common.LogRequestBodyEnabled {
 			if bytes, err := bodyStorage.Bytes(); err == nil {
 				// 限制大小，避免存入过大的请求体
-				maxLen := 10000 // 10KB
+				maxLen := 50000 // 50KB
 				bodyStr := string(bytes)
 				if len(bodyStr) > maxLen {
 					bodyStr = bodyStr[:maxLen] + "...(truncated)"

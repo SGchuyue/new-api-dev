@@ -27,8 +27,8 @@ func IOCopyBytesGracefully(c *gin.Context, src *http.Response, data []byte) {
 	// ★ 新增：捕获非流式响应体
 	if common.LogResponseBodyEnabled && c != nil && len(data) > 0 {
 		bodyStr := string(data)
-		if len(bodyStr) > 10000 {
-			bodyStr = bodyStr[:10000] + "...(truncated)"
+		if len(bodyStr) > 50000 {
+			bodyStr = bodyStr[:50000] + "...(truncated)"
 		}
 		c.Set("log_response_body", bodyStr)
 	}
