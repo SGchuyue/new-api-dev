@@ -42,8 +42,8 @@ const LogsPage = () => {
       <UserInfoModal {...logsData} />
       <ChannelAffinityUsageCacheModal {...logsData} />
       <ParamOverrideModal {...logsData} />
-      //新增查询
-<InputOutputModal {...logsData} />
+      {/* 新增查询 */}
+      <InputOutputModal {...logsData} />
       {/* Main Content */}
       <CardPro
         type='type2'

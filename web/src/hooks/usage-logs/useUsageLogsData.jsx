@@ -83,26 +83,25 @@ export const useLogsData = () => {
     ? 'logs-billing-display-mode-admin'
     : 'logs-billing-display-mode-user';
 
-  
-  // Input/Output modal state
-const [showInputOutput, setShowInputOutput] = useState(false);
-const [inputOutputData, setInputOutputData] = useState(null);
 
-const openInputOutputModal = (log) => {
-  const other = getLogOther(log.other);
-  setInputOutputData({
-    requestBody: other?.request_body || '',
-    responseBody: other?.response_body || '',
-    modelName: log.model_name || '',
-  });
-  setShowInputOutput(true);
-  
-  // Statistics state
+  // Input/Output modal state
+  const [showInputOutput, setShowInputOutput] = useState(false);
+  const [inputOutputData, setInputOutputData] = useState(null);
+
+  // Statistics state              ← 移到这里
   const [stat, setStat] = useState({
     quota: 0,
     token: 0,
   });
-};
+  const openInputOutputModal = (log) => {
+    const other = getLogOther(log.other);
+    setInputOutputData({
+      requestBody: other?.request_body || '',
+      responseBody: other?.response_body || '',
+      modelName: log.model_name || '',
+    });
+    setShowInputOutput(true);
+  };
 
   // Form state
   const [formApi, setFormApi] = useState(null);
@@ -443,38 +442,38 @@ const openInputOutputModal = (log) => {
           key: t('日志详情'),
           value: other?.claude
             ? renderClaudeLogContent(
-                other?.model_ratio,
-                other.completion_ratio,
-                other.model_price,
-                other.group_ratio,
-                other?.user_group_ratio,
-                other.cache_ratio || 1.0,
-                other.cache_creation_ratio || 1.0,
-                other.cache_creation_tokens_5m || 0,
-                other.cache_creation_ratio_5m ||
-                  other.cache_creation_ratio ||
-                  1.0,
-                other.cache_creation_tokens_1h || 0,
-                other.cache_creation_ratio_1h ||
-                  other.cache_creation_ratio ||
-                  1.0,
-                billingDisplayMode,
-              )
+              other?.model_ratio,
+              other.completion_ratio,
+              other.model_price,
+              other.group_ratio,
+              other?.user_group_ratio,
+              other.cache_ratio || 1.0,
+              other.cache_creation_ratio || 1.0,
+              other.cache_creation_tokens_5m || 0,
+              other.cache_creation_ratio_5m ||
+              other.cache_creation_ratio ||
+              1.0,
+              other.cache_creation_tokens_1h || 0,
+              other.cache_creation_ratio_1h ||
+              other.cache_creation_ratio ||
+              1.0,
+              billingDisplayMode,
+            )
             : renderLogContent(
-                other?.model_ratio,
-                other.completion_ratio,
-                other.model_price,
-                other.group_ratio,
-                other?.user_group_ratio,
-                other.cache_ratio || 1.0,
-                false,
-                1.0,
-                other.web_search || false,
-                other.web_search_call_count || 0,
-                other.file_search || false,
-                other.file_search_call_count || 0,
-                billingDisplayMode,
-              ),
+              other?.model_ratio,
+              other.completion_ratio,
+              other.model_price,
+              other.group_ratio,
+              other?.user_group_ratio,
+              other.cache_ratio || 1.0,
+              false,
+              1.0,
+              other.web_search || false,
+              other.web_search_call_count || 0,
+              other.file_search || false,
+              other.file_search_call_count || 0,
+              billingDisplayMode,
+            ),
         });
         if (logs[i]?.content) {
           expandDataLocal.push({
@@ -544,12 +543,12 @@ const openInputOutputModal = (log) => {
               other.cache_creation_ratio || 1.0,
               other.cache_creation_tokens_5m || 0,
               other.cache_creation_ratio_5m ||
-                other.cache_creation_ratio ||
-                1.0,
+              other.cache_creation_ratio ||
+              1.0,
               other.cache_creation_tokens_1h || 0,
               other.cache_creation_ratio_1h ||
-                other.cache_creation_ratio ||
-                1.0,
+              other.cache_creation_ratio ||
+              1.0,
               billingDisplayMode,
             );
           } else {
@@ -781,7 +780,7 @@ const openInputOutputModal = (log) => {
   // Page handlers
   const handlePageChange = (page) => {
     setActivePage(page);
-    loadLogs(page, pageSize).then((r) => {});
+    loadLogs(page, pageSize).then((r) => { });
   };
 
   const handlePageSizeChange = async (size) => {
@@ -887,11 +886,11 @@ const openInputOutputModal = (log) => {
     showParamOverrideModal,
     setShowParamOverrideModal,
     paramOverrideTarget,
-     // ★ 新增：Input/Output modal
-  showInputOutput,
-  setShowInputOutput,
-  inputOutputData,
-  openInputOutputModal,
+    // ★ 新增：Input/Output modal
+    showInputOutput,
+    setShowInputOutput,
+    inputOutputData,
+    openInputOutputModal,
 
     // Functions
     loadLogs,

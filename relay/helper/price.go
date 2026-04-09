@@ -20,15 +20,19 @@ const claudeCacheCreation1hMultiplier = 6 / 3.75
 // HandleGroupRatio checks for "auto_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
 func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
 	groupRatioInfo := types.GroupRatioInfo{
-		GroupRatio:        1.0, // default ratio
+		GroupRatio:        1.0,
 		GroupSpecialRatio: -1,
 	}
-
+	if relayInfo == nil {
+		return groupRatioInfo
+	}
 	// check auto group
 	autoGroup, exists := ctx.Get("auto_group")
-	if exists {
-		logger.LogDebug(ctx, fmt.Sprintf("final group: %s", autoGroup))
-		relayInfo.UsingGroup = autoGroup.(string)
+	if exists && autoGroup != nil {
+		if groupStr, ok := autoGroup.(string); ok {
+			logger.LogDebug(ctx, fmt.Sprintf("final group: %s", groupStr))
+			relayInfo.UsingGroup = groupStr
+		}
 	}
 
 	// check user group special ratio
@@ -54,6 +58,9 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
+	if info == nil {
+		return types.PriceData{}, fmt.Errorf("relay info is nil")
+	}
 	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
 
 	groupRatioInfo := HandleGroupRatio(c, info)
