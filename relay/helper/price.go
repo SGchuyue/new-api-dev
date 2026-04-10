@@ -47,7 +47,7 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 		groupRatioInfo.GroupRatio = ratio_setting.GetGroupRatio(relayInfo.UsingGroup)
 	}
 	// 用户专属渠道倍率，优先级最高
-	if relayInfo.UserId > 0 && relayInfo.ChannelId > 0 {
+	if relayInfo.UserId > 0 && relayInfo.ChannelMeta != nil && relayInfo.ChannelId > 0 {
 		if channelRatio, found := model.GetUserChannelRatio(relayInfo.UserId, relayInfo.ChannelId); found {
 			groupRatioInfo.GroupRatio = channelRatio
 			groupRatioInfo.GroupSpecialRatio = channelRatio
