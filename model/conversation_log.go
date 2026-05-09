@@ -48,3 +48,23 @@ func RecordConversationLog(c *gin.Context, userId int, modelName string) {
 		}
 	}()
 }
+
+// RecordConversationLogFromData 异步写入对话日志，不依赖 gin.Context
+// 用于在 goroutine 中调用时，数据已在调用前提取完毕
+func RecordConversationLogFromData(userId int, modelName, requestId, username, requestBody, responseBody string) {
+	if requestBody == "" && responseBody == "" {
+		return
+	}
+	log := &ConversationLog{
+		RequestId:    requestId,
+		UserId:       userId,
+		Username:     username,
+		ModelName:    modelName,
+		CreatedAt:    common.GetTimestamp(),
+		RequestBody:  requestBody,
+		ResponseBody: responseBody,
+	}
+	if err := LOG_DB.Create(log).Error; err != nil {
+		common.SysLog("failed to record conversation log: " + err.Error())
+	}
+}

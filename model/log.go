@@ -248,10 +248,14 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
                         common.SysLog("failed to record log: " + err.Error())
                 }
         })
-        // 异步写入对话日志
-        gopool.Go(func() {
-                RecordConversationLog(c, userId, params.ModelName)
-        })
+        // 异步写入对话日志（先提取数据，避免 goroutine 中访问已释放的 context）
+        reqBody := c.GetString("log_request_body")
+        respBody := c.GetString("log_response_body")
+        if reqBody != "" || respBody != "" {
+                gopool.Go(func() {
+                        RecordConversationLogFromData(userId, params.ModelName, requestId, username, reqBody, respBody)
+                })
+        }
         if common.DataExportEnabled {
 		gopool.Go(func() {
 			LogQuotaData(userId, username, params.ModelName, params.Quota, common.GetTimestamp(), params.PromptTokens+params.CompletionTokens)
