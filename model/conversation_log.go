@@ -2,7 +2,6 @@ package model
 
 import (
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 
 	"github.com/gin-gonic/gin"
 )
@@ -28,16 +27,24 @@ func RecordConversationLog(c *gin.Context, userId int, modelName string) {
 	if requestBody == "" && responseBody == "" {
 		return
 	}
+	// 提取 context 数据，避免 goroutine 中访问已释放的 context
+	requestId := c.GetString(common.RequestIdKey)
+	username := c.GetString("username")
+	timestamp := common.GetTimestamp()
+
 	log := &ConversationLog{
-		RequestId:    c.GetString(common.RequestIdKey),
+		RequestId:    requestId,
 		UserId:       userId,
-		Username:     c.GetString("username"),
+		Username:     username,
 		ModelName:    modelName,
-		CreatedAt:    common.GetTimestamp(),
+		CreatedAt:    timestamp,
 		RequestBody:  requestBody,
 		ResponseBody: responseBody,
 	}
-	if err := LOG_DB.Create(log).Error; err != nil {
-		logger.LogError(c, "failed to record conversation log: "+err.Error())
-	}
+	// 异步写入，不阻塞 API 响应
+	go func() {
+		if err := LOG_DB.Create(log).Error; err != nil {
+			common.SysLog("failed to record conversation log: " + err.Error())
+		}
+	}()
 }
