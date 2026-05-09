@@ -140,6 +140,7 @@ export const useChannelsData = () => {
     BALANCE: 'balance',
     PRIORITY: 'priority',
     WEIGHT: 'weight',
+    MAXBALANCE: 'max_balance',
     OPERATE: 'operate',
   };
 
@@ -180,6 +181,7 @@ export const useChannelsData = () => {
       [COLUMN_KEYS.BALANCE]: true,
       [COLUMN_KEYS.PRIORITY]: true,
       [COLUMN_KEYS.WEIGHT]: true,
+      [COLUMN_KEYS.MAXBALANCE]: true,
       [COLUMN_KEYS.OPERATE]: true,
     };
   };
@@ -464,6 +466,12 @@ export const useChannelsData = () => {
         if (value === '') return;
         data.weight = parseInt(value);
         if (data.weight < 0) data.weight = 0;
+        res = await API.put('/api/channel/', data);
+        break;
+      case 'max_balance':
+        if (value === '') return;
+        data.max_balance = parseFloat(value);
+        if (data.max_balance < 0) data.max_balance = 0;
         res = await API.put('/api/channel/', data);
         break;
       case 'enable_all':

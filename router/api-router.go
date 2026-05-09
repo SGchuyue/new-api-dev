@@ -208,6 +208,14 @@ func SetApiRouter(router *gin.Engine) {
 			performanceRoute.GET("/logs", controller.GetLogFiles)
 			performanceRoute.DELETE("/logs", controller.CleanupLogFiles)
 		}
+		userChannelRatioRoute := apiRouter.Group("/user_channel_ratio")
+		userChannelRatioRoute.Use(middleware.AdminAuth())
+		{
+			userChannelRatioRoute.GET("/", controller.GetUserChannelRatios)
+			userChannelRatioRoute.POST("/", controller.CreateUserChannelRatio)
+			userChannelRatioRoute.PUT("/", controller.UpdateUserChannelRatio)
+			userChannelRatioRoute.DELETE("/:id", controller.DeleteUserChannelRatio)
+		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
 		ratioSyncRoute.Use(middleware.RootAuth())
 		{

@@ -573,6 +573,65 @@ export const getChannelsColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.MAXBALANCE,
+      title: t('额度限额'),
+      dataIndex: 'max_balance',
+      render: (text, record, index) => {
+        if (record.children === undefined) {
+          return (
+            <div>
+              <InputNumber
+                style={{ width: 100 }}
+                name='max_balance'
+                onBlur={(e) => {
+                  manageChannel(record.id, 'max_balance', record, e.target.value);
+                }}
+                keepFocus={true}
+                innerButtons
+                defaultValue={record.max_balance}
+                min={0}
+                step={0.01}
+                precision={2}
+                size='small'
+              />
+            </div>
+          );
+        } else {
+          return (
+            <InputNumber
+              style={{ width: 100 }}
+              name='max_balance'
+              keepFocus={true}
+              onBlur={(e) => {
+                if (e.target.value === '') {
+                  return;
+                }
+                Modal.warning({
+                  title: t('修改子渠道额度限额'),
+                  content:
+                    t('确定要修改所有子渠道额度限额为 ') +
+                    '$' + e.target.value +
+                    t(' 吗？'),
+                  onOk: () => {
+                    submitTagEdit('max_balance', {
+                      tag: record.key,
+                      max_balance: e.target.value,
+                    });
+                  },
+                });
+              }}
+              innerButtons
+              defaultValue={record.max_balance}
+              min={0}
+              step={0.01}
+              precision={2}
+              size='small'
+            />
+          );
+        }
+      },
+    },
+    {
       key: COLUMN_KEYS.PRIORITY,
       title: t('优先级'),
       dataIndex: 'priority',
