@@ -243,60 +243,51 @@ func RedisIncr(key string, delta int64) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis INCR: key=%s, delta=%d", key, delta))
 	}
+	ctx := context.Background()
+
 	// 检查键的剩余生存时间
-	ttlCmd := RDB.TTL(context.Background(), key)
+	ttlCmd := RDB.TTL(ctx, key)
 	ttl, err := ttlCmd.Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("failed to get TTL: %w", err)
 	}
 
-	// 只有在 key 存在且有 TTL 时才需要特殊处理
+	// key 存在且有 TTL 时，保留原过期时间
 	if ttl > 0 {
-		ctx := context.Background()
-		// 开始一个Redis事务
 		txn := RDB.TxPipeline()
-
-		// 减少余额
-		decrCmd := txn.IncrBy(ctx, key, delta)
-		if err := decrCmd.Err(); err != nil {
-			return err // 如果减少失败，则直接返回错误
-		}
-
-		// 重新设置过期时间，使用原来的过期时间
+		txn.IncrBy(ctx, key, delta)
 		txn.Expire(ctx, key, ttl)
-
-		// 执行事务
 		_, err = txn.Exec(ctx)
 		return err
 	}
-	return nil
+
+	// key 不存在或无 TTL，直接扣减（不设过期时间）
+	return RDB.IncrBy(ctx, key, delta).Err()
 }
 
 func RedisHIncrBy(key, field string, delta int64) error {
 	if DebugEnabled {
 		SysLog(fmt.Sprintf("Redis HINCRBY: key=%s, field=%s, delta=%d", key, field, delta))
 	}
-	ttlCmd := RDB.TTL(context.Background(), key)
+	ctx := context.Background()
+
+	ttlCmd := RDB.TTL(ctx, key)
 	ttl, err := ttlCmd.Result()
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return fmt.Errorf("failed to get TTL: %w", err)
 	}
 
+	// key 存在且有 TTL 时，保留原过期时间
 	if ttl > 0 {
-		ctx := context.Background()
 		txn := RDB.TxPipeline()
-
-		incrCmd := txn.HIncrBy(ctx, key, field, delta)
-		if err := incrCmd.Err(); err != nil {
-			return err
-		}
-
+		txn.HIncrBy(ctx, key, field, delta)
 		txn.Expire(ctx, key, ttl)
-
 		_, err = txn.Exec(ctx)
 		return err
 	}
-	return nil
+
+	// key 不存在或无 TTL，直接扣减
+	return RDB.HIncrBy(ctx, key, field, delta).Err()
 }
 
 func RedisHSetField(key, field string, value interface{}) error {
