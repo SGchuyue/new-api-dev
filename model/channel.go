@@ -940,6 +940,13 @@ func (channel *Channel) GetOtherSettings() dto.ChannelOtherSettings {
 	return setting
 }
 
+// GetChannelRpmLimit 获取渠道的 RPM（每分钟请求数）限制
+// 返回 0 表示不限制
+func (channel *Channel) GetChannelRpmLimit() int {
+	otherSettings := channel.GetOtherSettings()
+	return otherSettings.RpmLimit
+}
+
 func (channel *Channel) SetOtherSettings(setting dto.ChannelOtherSettings) {
 	settingBytes, err := common.Marshal(setting)
 	if err != nil {

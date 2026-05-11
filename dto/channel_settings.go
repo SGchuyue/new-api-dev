@@ -41,6 +41,7 @@ type ChannelOtherSettings struct {
 	UpstreamModelUpdateLastDetectedModels []string      `json:"upstream_model_update_last_detected_models,omitempty"` // 上次检测到的可加入模型
 	UpstreamModelUpdateLastRemovedModels  []string      `json:"upstream_model_update_last_removed_models,omitempty"`  // 上次检测到的可删除模型
 	UpstreamModelUpdateIgnoredModels      []string      `json:"upstream_model_update_ignored_models,omitempty"`       // 手动忽略的模型
+	RpmLimit                              int           `json:"rpm_limit,omitempty"` // 渠道级别 RPM（每分钟请求数）限制，0 表示不限制
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

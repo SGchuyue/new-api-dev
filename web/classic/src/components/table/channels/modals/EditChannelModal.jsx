@@ -211,6 +211,8 @@ const EditChannelModal = (props) => {
     allow_inference_geo: false,
     allow_speed: false,
     claude_beta_query: false,
+    // 渠道级别 RPM 限制
+    rpm_limit: 0,
     upstream_model_update_check_enabled: false,
     upstream_model_update_auto_sync_enabled: false,
     upstream_model_update_last_check_time: 0,
@@ -912,6 +914,8 @@ const EditChannelModal = (props) => {
             parsedSettings.allow_inference_geo || false;
           data.allow_speed = parsedSettings.allow_speed || false;
           data.claude_beta_query = parsedSettings.claude_beta_query || false;
+          // 读取渠道级别 RPM 限制
+          data.rpm_limit = Number(parsedSettings.rpm_limit) || 0;
           data.upstream_model_update_check_enabled =
             parsedSettings.upstream_model_update_check_enabled === true;
           data.upstream_model_update_auto_sync_enabled =
@@ -1804,6 +1808,9 @@ const EditChannelModal = (props) => {
       }
     }
 
+    // 保存渠道级别 RPM 限制到 settings
+    settings.rpm_limit = parseInt(localInputs.rpm_limit) || 0;
+
     settings.upstream_model_update_check_enabled =
       localInputs.upstream_model_update_check_enabled === true;
     settings.upstream_model_update_auto_sync_enabled =
@@ -1849,6 +1856,8 @@ const EditChannelModal = (props) => {
     delete localInputs.allow_inference_geo;
     delete localInputs.allow_speed;
     delete localInputs.claude_beta_query;
+    // 清理渠道级别 RPM 限制的临时字段
+    delete localInputs.rpm_limit;
     delete localInputs.upstream_model_update_check_enabled;
     delete localInputs.upstream_model_update_auto_sync_enabled;
     delete localInputs.upstream_model_update_last_check_time;
@@ -2495,6 +2504,18 @@ const EditChannelModal = (props) => {
                         onNumberChange={(value) => handleInputChange('max_balance', value)}
                         style={{ width: '100%' }}
                         extraText={t('设置该渠道可消耗的最大金额，达到限额后自动停用，0 表示不限制')}
+                      />
+                    </Col>
+                    <Col span={12}>
+                      <Form.InputNumber
+                        field='rpm_limit'
+                        label={t('RPM 限制')}
+                        placeholder={t('0 表示不限制')}
+                        min={0}
+                        step={1}
+                        onNumberChange={(value) => handleInputChange('rpm_limit', value)}
+                        style={{ width: '100%' }}
+                        extraText={t('设置该渠道每分钟最大请求数，达到限制后请求将被分配到其他渠道，0 表示不限制')}
                       />
                     </Col>
                   </Row>
