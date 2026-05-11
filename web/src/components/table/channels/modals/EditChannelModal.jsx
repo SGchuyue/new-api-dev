@@ -214,6 +214,8 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_check_time: 0,
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
+    // 渠道级别 RPM 限制
+    rpm_limit: 0,
   };
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
@@ -903,6 +905,8 @@ const EditChannelModal = (props) => {
           )
             ? parsedSettings.upstream_model_update_ignored_models.join(',')
             : '';
+          // 读取渠道级别 RPM 限制
+          data.rpm_limit = Number(parsedSettings.rpm_limit) || 0;
         } catch (error) {
           console.error('解析其他设置失败:', error);
           data.azure_responses_version = '';
@@ -1798,6 +1802,9 @@ const EditChannelModal = (props) => {
       settings.upstream_model_update_last_check_time = 0;
     }
 
+    // 保存渠道级别 RPM 限制到 settings
+    settings.rpm_limit = parseInt(localInputs.rpm_limit) || 0;
+
     localInputs.settings = JSON.stringify(settings);
 
     // 清理不需要发送到后端的字段
@@ -1824,6 +1831,8 @@ const EditChannelModal = (props) => {
     delete localInputs.upstream_model_update_last_check_time;
     delete localInputs.upstream_model_update_last_detected_models;
     delete localInputs.upstream_model_update_ignored_models;
+    // 清理渠道级别 RPM 限制的临时字段
+    delete localInputs.rpm_limit;
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
@@ -2465,6 +2474,18 @@ const EditChannelModal = (props) => {
                         onNumberChange={(value) => handleInputChange('max_balance', value)}
                         style={{ width: '100%' }}
                         extraText={t('设置该渠道可消耗的最大金额，达到限额后自动停用，0 表示不限制')}
+                      />
+                    </Col>
+                    <Col span={12}>
+                      <Form.InputNumber
+                        field='rpm_limit'
+                        label={t('RPM 限制')}
+                        placeholder={t('0 表示不限制')}
+                        min={0}
+                        step={1}
+                        onNumberChange={(value) => handleInputChange('rpm_limit', value)}
+                        style={{ width: '100%' }}
+                        extraText={t('设置该渠道每分钟最大请求数，达到限制后请求将被分配到其他渠道，0 表示不限制')}
                       />
                     </Col>
                   </Row>

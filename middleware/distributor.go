@@ -51,6 +51,12 @@ func Distribute() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 				return
 			}
+			// 检查指定渠道的 RPM 限制
+			rpmLimit := channel.GetChannelRpmLimit()
+			if rpmLimit > 0 && !common.CheckChannelRPM(channel.Id, rpmLimit) {
+				abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("channel %d has reached RPM limit (%d/min)", channel.Id, rpmLimit))
+				return
+			}
 		} else {
 			// Select a channel for the user
 			// check token model mapping
@@ -107,6 +113,8 @@ func Distribute() func(c *gin.Context) {
 								abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 								return
 							}
+						} else if preferredRpmLimit := preferred.GetChannelRpmLimit(); preferredRpmLimit > 0 && !common.CheckChannelRPM(preferred.Id, preferredRpmLimit) {
+							// 优先渠道已达到 RPM 限制，跳过，使用普通选择逻辑
 						} else if usingGroup == "auto" {
 							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 							autoGroups := service.GetUserAutoGroup(userGroup)
@@ -160,6 +168,11 @@ func Distribute() func(c *gin.Context) {
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			service.RecordChannelAffinity(c, channel.Id)
+			// 请求成功后，对渠道的 RPM 计数器 +1
+			rpmLimit := channel.GetChannelRpmLimit()
+			if rpmLimit > 0 {
+				common.IncrementChannelRPM(channel.Id, rpmLimit)
+			}
 		}
 	}
 }

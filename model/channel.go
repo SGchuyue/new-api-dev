@@ -916,6 +916,13 @@ func (channel *Channel) SetOtherSettings(setting dto.ChannelOtherSettings) {
 	channel.OtherSettings = string(settingBytes)
 }
 
+// GetChannelRpmLimit 获取渠道的 RPM（每分钟请求数）限制
+// 返回 0 表示不限制
+func (channel *Channel) GetChannelRpmLimit() int {
+	otherSettings := channel.GetOtherSettings()
+	return otherSettings.RpmLimit
+}
+
 func (channel *Channel) GetParamOverride() map[string]interface{} {
 	paramOverride := make(map[string]interface{})
 	if channel.ParamOverride != nil && *channel.ParamOverride != "" {
