@@ -1,9 +1,20 @@
 package model
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/QuantumNous/new-api/common"
+	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 )
+
+var minioClient *minio.Client
+var minioBucket string
+var minioEnabled bool
 
 // ConversationRecord 对话日志统一数据结构
 type ConversationRecord struct {
@@ -14,6 +25,62 @@ type ConversationRecord struct {
 	CreatedAt    int64
 	RequestBody  string
 	ResponseBody string
+}
+
+// ArchiveRecord 归档记录（上传到 MinIO 的 JSON 格式）
+type ArchiveRecord struct {
+	RequestId    string `json:"request_id"`
+	UserId       int    `json:"user_id"`
+	Username     string `json:"username"`
+	ModelName    string `json:"model_name"`
+	CreatedAt    int64  `json:"created_at"`
+	RequestBody  string `json:"request_body"`
+	ResponseBody string `json:"response_body"`
+}
+
+// InitLogStorage 初始化日志存储层
+func InitLogStorage() {
+	endpoint := common.GetEnvOrDefaultString("MINIO_ENDPOINT", "")
+	if endpoint == "" {
+		minioEnabled = false
+		common.SysLog("log storage: MySQL backend (gzip compressed)")
+		return
+	}
+
+	accessKey := common.GetEnvOrDefaultString("MINIO_ACCESS_KEY", "")
+	secretKey := common.GetEnvOrDefaultString("MINIO_SECRET_KEY", "")
+	useSSL := common.GetEnvOrDefaultBool("MINIO_USE_SSL", false)
+	minioBucket = common.GetEnvOrDefaultString("MINIO_BUCKET", "conversation-logs")
+
+	var err error
+	minioClient, err = minio.New(endpoint, &minio.Options{
+		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
+		Secure: useSSL,
+	})
+	if err != nil {
+		minioEnabled = false
+		common.SysLog(fmt.Sprintf("log storage: MinIO init failed: %v, falling back to MySQL", err))
+		return
+	}
+
+	ctx := context.Background()
+	exists, err := minioClient.BucketExists(ctx, minioBucket)
+	if err != nil {
+		minioEnabled = false
+		common.SysLog(fmt.Sprintf("log storage: MinIO bucket check failed: %v, falling back to MySQL", err))
+		return
+	}
+	if !exists {
+		err = minioClient.MakeBucket(ctx, minioBucket, minio.MakeBucketOptions{})
+		if err != nil {
+			minioEnabled = false
+			common.SysLog(fmt.Sprintf("log storage: MinIO create bucket failed: %v, falling back to MySQL", err))
+			return
+		}
+	}
+
+	minioEnabled = true
+	common.SysLog(fmt.Sprintf("log storage: MySQL + MinIO (bucket: %s, endpoint: %s)", minioBucket, endpoint))
 }
 
 // SaveConversationLog 保存对话日志（MySQL + gzip 压缩）
@@ -30,101 +97,133 @@ func SaveConversationLog(record *ConversationRecord) error {
 	return LOG_DB.Create(log).Error
 }
 
-// GetConversationLog 查询对话日志（自动解压）
+// GetConversationLog 查询对话日志（先 MySQL，后 MinIO，自动解压）
 func GetConversationLog(requestId string) (*ConversationRecord, error) {
 	var log ConversationLog
 	err := LOG_DB.Where("request_id = ?", requestId).First(&log).Error
-	if err != nil {
-		return nil, err
+	if err == nil {
+		return &ConversationRecord{
+			RequestId:    log.RequestId,
+			UserId:       log.UserId,
+			Username:     log.Username,
+			ModelName:    log.ModelName,
+			CreatedAt:    log.CreatedAt,
+			RequestBody:  log.GetDecompressedRequestBody(),
+			ResponseBody: log.GetDecompressedResponseBody(),
+		}, nil
 	}
+
+	// MySQL 没有，尝试从 MinIO 读取
+	if minioEnabled {
+		return getConversationLogFromMinIO(requestId)
+	}
+
+	return nil, err
+}
+
+// getConversationLogFromMinIO 从 MinIO 读取归档数据
+func getConversationLogFromMinIO(requestId string) (*ConversationRecord, error) {
+	objectKey := getObjectKey(requestId)
+	ctx := context.Background()
+
+	obj, err := minioClient.GetObject(ctx, minioBucket, objectKey, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("minio get failed: %w", err)
+	}
+	defer obj.Close()
+
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(obj); err != nil {
+		return nil, fmt.Errorf("minio read failed: %w", err)
+	}
+
+	// MinIO 存的是 gzip 压缩后的 JSON，先解压
+	decompressed := common.GzipDecompress(buf.String())
+
+	var record ArchiveRecord
+	if err := json.Unmarshal([]byte(decompressed), &record); err != nil {
+		return nil, fmt.Errorf("minio unmarshal failed: %w", err)
+	}
+
 	return &ConversationRecord{
-		RequestId:    log.RequestId,
-		UserId:       log.UserId,
-		Username:     log.Username,
-		ModelName:    log.ModelName,
-		CreatedAt:    log.CreatedAt,
-		RequestBody:  log.GetDecompressedRequestBody(),
-		ResponseBody: log.GetDecompressedResponseBody(),
+		RequestId:    record.RequestId,
+		UserId:       record.UserId,
+		Username:     record.Username,
+		ModelName:    record.ModelName,
+		CreatedAt:    record.CreatedAt,
+		RequestBody:  record.RequestBody,
+		ResponseBody: record.ResponseBody,
 	}, nil
 }
 
-// InitLogStorage 初始化日志存储层
-// 当前: MySQL + gzip 压缩
-// 预留: 配置 MINIO_ENDPOINT 后可切换到 MinIO
-func InitLogStorage() {
-	minioEndpoint := common.GetEnvOrDefaultString("MINIO_ENDPOINT", "")
-	if minioEndpoint != "" {
-		common.SysLog("log storage: MinIO configured but not yet implemented, using MySQL + gzip")
-	} else {
-		common.SysLog("log storage: MySQL backend (gzip compressed)")
+// getObjectKey 生成 MinIO 对象路径: YYYY/MM/DD/{request_id}.json.gz
+func getObjectKey(requestId string) string {
+	if len(requestId) >= 8 {
+		year := requestId[:4]
+		month := requestId[4:6]
+		day := requestId[6:8]
+		return fmt.Sprintf("%s/%s/%s/%s.json.gz", year, month, day, requestId)
 	}
+	return fmt.Sprintf("unknown/%s.json.gz", requestId)
 }
 
-// BatchCompressOldConversationLogs 批量压缩旧的未压缩对话日志
-// 注意：无事务保护，但 GzipDecompress 是幂等的（对未压缩数据原样返回）
-// 即使进程崩溃导致部分压缩部分未压缩，读取时也不会数据损坏
-func BatchCompressOldConversationLogs(batchLimit int) (int, error) {
+// ArchiveOldConversationLogs 归档超过 retentionDays 天的 conversation_logs 到 MinIO
+// 返回：归档成功数量，删除成功数量，错误
+func ArchiveOldConversationLogs(retentionDays int, batchLimit int) (archived int, deleted int, err error) {
+	if !minioEnabled {
+		return 0, 0, fmt.Errorf("minio not enabled")
+	}
+
+	cutoff := time.Now().AddDate(0, 0, -retentionDays).Unix()
+	ctx := context.Background()
+
 	var logs []ConversationLog
-	err := LOG_DB.Where("request_body != '' AND request_body NOT LIKE ?", "gz:%").
-		Limit(batchLimit).Order("id ASC").Find(&logs).Error
+	err = LOG_DB.Where("created_at < ?", cutoff).
+		Order("id ASC").
+		Limit(batchLimit).
+		Find(&logs).Error
 	if err != nil {
-		return 0, fmt.Errorf("query failed: %w", err)
+		return 0, 0, fmt.Errorf("query old logs failed: %w", err)
 	}
-	if len(logs) == 0 {
-		return 0, nil
-	}
-	compressed := 0
+
 	for i := range logs {
-		cb := common.GzipCompress(logs[i].RequestBody)
-		cr := common.GzipCompress(logs[i].ResponseBody)
-		if cb != logs[i].RequestBody || cr != logs[i].ResponseBody {
-			if err := LOG_DB.Model(&logs[i]).Updates(map[string]interface{}{
-				"request_body":  cb,
-				"response_body": cr,
-			}).Error; err != nil {
-				common.SysLog(fmt.Sprintf("compress conversation log id=%d failed: %s", logs[i].Id, err.Error()))
-			} else {
-				compressed++
-			}
+		// 构建归档数据
+		record := ArchiveRecord{
+			RequestId:    logs[i].RequestId,
+			UserId:       logs[i].UserId,
+			Username:     logs[i].Username,
+			ModelName:    logs[i].ModelName,
+			CreatedAt:    logs[i].CreatedAt,
+			RequestBody:  logs[i].GetDecompressedRequestBody(),
+			ResponseBody: logs[i].GetDecompressedResponseBody(),
 		}
+
+		data, err := json.Marshal(record)
+		if err != nil {
+			common.SysLog(fmt.Sprintf("archive marshal failed: request_id=%s, error=%v", logs[i].RequestId, err))
+			continue
+		}
+
+		// gzip 压缩后上传
+		compressed := common.GzipCompress(string(data))
+		objectKey := getObjectKey(logs[i].RequestId)
+		reader := bytes.NewReader([]byte(compressed))
+
+		_, err = minioClient.PutObject(ctx, minioBucket, objectKey, reader, int64(len(compressed)),
+			minio.PutObjectOptions{ContentType: "application/gzip"})
+		if err != nil {
+			common.SysLog(fmt.Sprintf("archive upload failed: request_id=%s, error=%v", logs[i].RequestId, err))
+			continue
+		}
+		archived++
+
+		// 上传成功，删除 MySQL 记录
+		if err := LOG_DB.Delete(&logs[i]).Error; err != nil {
+			common.SysLog(fmt.Sprintf("archive delete failed: request_id=%s, error=%v", logs[i].RequestId, err))
+			continue
+		}
+		deleted++
 	}
-	return compressed, nil
-}
 
-// ============================================================
-// MinIO 预留配置（不启用，不影响编译）
-// ============================================================
-
-// MinIOConfig MinIO 配置
-type MinIOConfig struct {
-	Endpoint  string
-	AccessKey string
-	SecretKey string
-	Bucket    string
-	UseSSL    bool
-}
-
-// GetMinIOConfig 获取 MinIO 配置
-func GetMinIOConfig() *MinIOConfig {
-	return &MinIOConfig{
-		Endpoint:  common.GetEnvOrDefaultString("MINIO_ENDPOINT", ""),
-		AccessKey: common.GetEnvOrDefaultString("MINIO_ACCESS_KEY", "admin"),
-		SecretKey: common.GetEnvOrDefaultString("MINIO_SECRET_KEY", ""),
-		Bucket:    common.GetEnvOrDefaultString("MINIO_BUCKET", "conversation-logs"),
-		UseSSL:    common.GetEnvOrDefaultBool("MINIO_USE_SSL", false),
-	}
-}
-
-// ConversationLogIndex 对话日志索引（MinIO 启用时使用）
-type ConversationLogIndex struct {
-	Id               int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	RequestId        string `json:"request_id" gorm:"type:varchar(64);uniqueIndex;default:''"`
-	UserId           int    `json:"user_id" gorm:"index"`
-	Username         string `json:"username" gorm:"type:varchar(64);index;default:''"`
-	ModelName        string `json:"model_name" gorm:"type:varchar(128);index;default:''"`
-	CreatedAt        int64  `json:"created_at" gorm:"bigint;index"`
-	StorageKey       string `json:"storage_key" gorm:"type:varchar(256);default:''"`
-	StorageType      string `json:"storage_type" gorm:"type:varchar(16);default:'mysql'"`
-	RequestBodySize  int    `json:"request_body_size" gorm:"default:0"`
-	ResponseBodySize int    `json:"response_body_size" gorm:"default:0"`
+	return archived, deleted, nil
 }

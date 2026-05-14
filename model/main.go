@@ -236,6 +236,7 @@ func InitLogDB() (err error) {
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
                 InitLogStorage()
+			go startArchiveTask()
 
 		if !common.IsMasterNode {
 			return nil
@@ -709,4 +710,38 @@ func PingDB() error {
 	lastPingTime = time.Now()
 	common.SysLog("Database pinged successfully")
 	return nil
+}
+
+// startArchiveTask 启动定时归档任务
+// 每天凌晨3点执行，归档超过7天的conversation_logs到MinIO
+func startArchiveTask() {
+	if !minioEnabled {
+		return
+	}
+	common.SysLog("archive task: started, will archive logs older than 7 days at 03:00 daily")
+	for {
+		now := time.Now()
+		next := time.Date(now.Year(), now.Month(), now.Day(), 3, 0, 0, 0, now.Location())
+		if now.After(next) {
+			next = next.Add(24 * time.Hour)
+		}
+		time.Sleep(next.Sub(now))
+		common.SysLog("archive task: starting...")
+		totalArchived := 0
+		totalDeleted := 0
+		for {
+			archived, deleted, err := ArchiveOldConversationLogs(7, 500)
+			if err != nil {
+				common.SysLog(fmt.Sprintf("archive task: error: %v", err))
+				break
+			}
+			totalArchived += archived
+			totalDeleted += deleted
+			if archived == 0 {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+		common.SysLog(fmt.Sprintf("archive task: completed, archived=%d, deleted=%d", totalArchived, totalDeleted))
+	}
 }
