@@ -947,6 +947,19 @@ func (channel *Channel) GetChannelRpmLimit() int {
 	return otherSettings.RpmLimit
 }
 
+// GetModelRpmLimit 获取指定模型的 RPM 限制
+// 返回 0 表示该模型不限制
+func (channel *Channel) GetModelRpmLimit(model string) int {
+	if model == "" {
+		return 0
+	}
+	otherSettings := channel.GetOtherSettings()
+	if otherSettings.ModelRpmLimits == nil {
+		return 0
+	}
+	return otherSettings.ModelRpmLimits[model]
+}
+
 func (channel *Channel) SetOtherSettings(setting dto.ChannelOtherSettings) {
 	settingBytes, err := common.Marshal(setting)
 	if err != nil {

@@ -51,10 +51,9 @@ func Distribute() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 				return
 			}
-			// 检查指定渠道的 RPM 限制
-			rpmLimit := channel.GetChannelRpmLimit()
-			if rpmLimit > 0 && !common.CheckChannelRPM(channel.Id, rpmLimit) {
-				abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("channel %d has reached RPM limit (%d/min)", channel.Id, rpmLimit))
+			// 原子性检查并记录渠道 RPM 限制
+			if modelRpmLimit := channel.GetModelRpmLimit(modelRequest.Model); modelRpmLimit > 0 && !common.AllowAndRecordChannelRPM(channel.Id, modelRequest.Model, modelRpmLimit) {
+				abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("channel %d has reached RPM limit for model %s (%d/min)", channel.Id, modelRequest.Model, modelRpmLimit))
 				return
 			}
 		} else {
@@ -113,7 +112,7 @@ func Distribute() func(c *gin.Context) {
 								abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorAffinityChannelDisabled))
 								return
 							}
-						} else if preferredRpmLimit := preferred.GetChannelRpmLimit(); preferredRpmLimit > 0 && !common.CheckChannelRPM(preferred.Id, preferredRpmLimit) {
+						} else if pModelRpmLimit := preferred.GetModelRpmLimit(modelRequest.Model); pModelRpmLimit > 0 && !common.CheckChannelRPM(preferred.Id, modelRequest.Model, pModelRpmLimit) {
 							// 优先渠道已达到 RPM 限制，跳过，使用普通选择逻辑
 						} else if usingGroup == "auto" {
 							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
@@ -168,10 +167,11 @@ func Distribute() func(c *gin.Context) {
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			service.RecordChannelAffinity(c, channel.Id)
-			// 请求成功后，对渠道的 RPM 计数器 +1
-			rpmLimit := channel.GetChannelRpmLimit()
-			if rpmLimit > 0 {
-				common.IncrementChannelRPM(channel.Id, rpmLimit)
+			// auto-selected 渠道按模型记录 RPM
+			if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); !ok {
+					if mRpmLimit := channel.GetModelRpmLimit(modelRequest.Model); mRpmLimit > 0 {
+                                        common.AllowAndRecordChannelRPM(channel.Id, modelRequest.Model, mRpmLimit)
+				}
 			}
 		}
 	}

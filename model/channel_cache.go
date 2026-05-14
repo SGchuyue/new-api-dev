@@ -147,9 +147,9 @@ func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel,
 	for _, channelId := range channels {
 		if channel, ok := channelsIDM[channelId]; ok {
 			if channel.GetPriority() == targetPriority {
-				// 检查渠道 RPM 限制，跳过已达到限制的渠道
-				rpmLimit := channel.GetChannelRpmLimit()
-				if rpmLimit > 0 && !common.CheckChannelRPM(channel.Id, rpmLimit) {
+				// 检查渠道模型 RPM 限制
+				modelRpmLimit := channel.GetModelRpmLimit(model)
+				if modelRpmLimit > 0 && !common.CheckChannelRPM(channel.Id, model, modelRpmLimit) {
 					continue
 				}
 				sumWeight += channel.GetWeight()

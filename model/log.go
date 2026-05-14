@@ -54,7 +54,7 @@ func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
 		var otherMap map[string]interface{}
-		otherMap, _ = common.StrToMap(logs[i].Other)
+		otherMap, _ = common.StrToMap(common.GzipDecompress(logs[i].Other))
 		if otherMap != nil {
 			// Remove admin-only debug fields.
 			delete(otherMap, "admin_info")
@@ -107,7 +107,7 @@ func RecordLogWithAdminInfo(userId int, logType int, content string, adminInfo m
 		other := map[string]interface{}{
 			"admin_info": adminInfo,
 		}
-		log.Other = common.MapToJsonStr(other)
+		log.Other = common.GzipCompress(common.MapToJsonStr(other))
 	}
 	if err := LOG_DB.Create(log).Error; err != nil {
 		common.SysLog("failed to record log: " + err.Error())
@@ -134,7 +134,7 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 		Type:      LogTypeTopup,
 		Content:   content,
 		Ip:        callerIp,
-		Other:     common.MapToJsonStr(other),
+		Other:     common.GzipCompress(common.MapToJsonStr(other)),
 	}
 	err := LOG_DB.Create(log).Error
 	if err != nil {
@@ -178,11 +178,17 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 			return ""
 		}(),
 		RequestId: requestId,
-		Other:     otherStr,
+		Other:     common.GzipCompress(otherStr),
 	}
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
+	}
+	reqBody, respBody := c.GetString("log_request_body"), c.GetString("log_response_body")
+	if reqBody != "" || respBody != "" {
+		gopool.Go(func() {
+			RecordConversationLogFromData(userId, modelName, requestId, username, reqBody, respBody)
+		})
 	}
 }
 
@@ -239,7 +245,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			return ""
 		}(),
 		RequestId: requestId,
-		Other:     otherStr,
+		Other:     common.GzipCompress(otherStr),
 	}
         // 异步写入日志，不阻塞 API 响应
         gopool.Go(func() {
@@ -298,7 +304,7 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 		ChannelId: params.ChannelId,
 		TokenId:   params.TokenId,
 		Group:     params.Group,
-		Other:     common.MapToJsonStr(params.Other),
+		Other:     common.GzipCompress(common.MapToJsonStr(params.Other)),
 	}
 	err := LOG_DB.Create(log).Error
 	if err != nil {
@@ -387,6 +393,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		}
 	}
 
+        for i := range logs {
+        	logs[i].Other = common.GzipDecompress(logs[i].Other)
+        }
 	return logs, total, err
 }
 

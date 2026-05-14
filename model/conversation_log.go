@@ -6,7 +6,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// ConversationLog stores full request/response bodies separately from logs.other
+// ConversationLog stores full request/response bodies
+// body 字段使用 gzip 压缩存储，节省 70-80% 空间
 type ConversationLog struct {
 	Id           int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	RequestId    string `json:"request_id" gorm:"type:varchar(64);index;default:''"`
@@ -14,8 +15,18 @@ type ConversationLog struct {
 	Username     string `json:"username" gorm:"type:varchar(64);index;default:''"`
 	ModelName    string `json:"model_name" gorm:"type:varchar(128);index;default:''"`
 	CreatedAt    int64  `json:"created_at" gorm:"bigint;index"`
-	RequestBody  string `json:"request_body" gorm:"type:text"`
-	ResponseBody string `json:"response_body" gorm:"type:text"`
+	RequestBody  string `json:"request_body" gorm:"type:longtext"`
+	ResponseBody string `json:"response_body" gorm:"type:longtext"`
+}
+
+// GetDecompressedRequestBody 获取解压后的请求体
+func (c *ConversationLog) GetDecompressedRequestBody() string {
+	return common.GzipDecompress(c.RequestBody)
+}
+
+// GetDecompressedResponseBody 获取解压后的响应体
+func (c *ConversationLog) GetDecompressedResponseBody() string {
+	return common.GzipDecompress(c.ResponseBody)
 }
 
 func RecordConversationLog(c *gin.Context, userId int, modelName string) {
@@ -27,12 +38,11 @@ func RecordConversationLog(c *gin.Context, userId int, modelName string) {
 	if requestBody == "" && responseBody == "" {
 		return
 	}
-	// 提取 context 数据，避免 goroutine 中访问已释放的 context
 	requestId := c.GetString(common.RequestIdKey)
 	username := c.GetString("username")
 	timestamp := common.GetTimestamp()
 
-	log := &ConversationLog{
+	record := &ConversationRecord{
 		RequestId:    requestId,
 		UserId:       userId,
 		Username:     username,
@@ -41,21 +51,19 @@ func RecordConversationLog(c *gin.Context, userId int, modelName string) {
 		RequestBody:  requestBody,
 		ResponseBody: responseBody,
 	}
-	// 异步写入，不阻塞 API 响应
 	go func() {
-		if err := LOG_DB.Create(log).Error; err != nil {
+		if err := SaveConversationLog(record); err != nil {
 			common.SysLog("failed to record conversation log: " + err.Error())
 		}
 	}()
 }
 
 // RecordConversationLogFromData 异步写入对话日志，不依赖 gin.Context
-// 用于在 goroutine 中调用时，数据已在调用前提取完毕
 func RecordConversationLogFromData(userId int, modelName, requestId, username, requestBody, responseBody string) {
 	if requestBody == "" && responseBody == "" {
 		return
 	}
-	log := &ConversationLog{
+	record := &ConversationRecord{
 		RequestId:    requestId,
 		UserId:       userId,
 		Username:     username,
@@ -64,7 +72,7 @@ func RecordConversationLogFromData(userId int, modelName, requestId, username, r
 		RequestBody:  requestBody,
 		ResponseBody: responseBody,
 	}
-	if err := LOG_DB.Create(log).Error; err != nil {
+	if err := SaveConversationLog(record); err != nil {
 		common.SysLog("failed to record conversation log: " + err.Error())
 	}
 }

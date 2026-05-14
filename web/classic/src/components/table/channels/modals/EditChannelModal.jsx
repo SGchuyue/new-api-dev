@@ -46,6 +46,7 @@ import {
   Col,
   Highlight,
   Input,
+  InputNumber,
   Tooltip,
   Collapse,
   Dropdown,
@@ -213,6 +214,7 @@ const EditChannelModal = (props) => {
     claude_beta_query: false,
     // 渠道级别 RPM 限制
     rpm_limit: 0,
+    model_rpm_limits: {},
     upstream_model_update_check_enabled: false,
     upstream_model_update_auto_sync_enabled: false,
     upstream_model_update_last_check_time: 0,
@@ -916,6 +918,7 @@ const EditChannelModal = (props) => {
           data.claude_beta_query = parsedSettings.claude_beta_query || false;
           // 读取渠道级别 RPM 限制
           data.rpm_limit = Number(parsedSettings.rpm_limit) || 0;
+          data.model_rpm_limits = parsedSettings.model_rpm_limits || {};
           data.upstream_model_update_check_enabled =
             parsedSettings.upstream_model_update_check_enabled === true;
           data.upstream_model_update_auto_sync_enabled =
@@ -1810,6 +1813,7 @@ const EditChannelModal = (props) => {
 
     // 保存渠道级别 RPM 限制到 settings
     settings.rpm_limit = parseInt(localInputs.rpm_limit) || 0;
+    settings.model_rpm_limits = localInputs.model_rpm_limits || {};
 
     settings.upstream_model_update_check_enabled =
       localInputs.upstream_model_update_check_enabled === true;
@@ -1858,6 +1862,7 @@ const EditChannelModal = (props) => {
     delete localInputs.claude_beta_query;
     // 清理渠道级别 RPM 限制的临时字段
     delete localInputs.rpm_limit;
+    delete localInputs.model_rpm_limits;
     delete localInputs.upstream_model_update_check_enabled;
     delete localInputs.upstream_model_update_auto_sync_enabled;
     delete localInputs.upstream_model_update_last_check_time;
@@ -2509,16 +2514,76 @@ const EditChannelModal = (props) => {
                     <Col span={12}>
                       <Form.InputNumber
                         field='rpm_limit'
-                        label={t('RPM 限制')}
+                        label={t('渠道总 RPM 限制')}
                         placeholder={t('0 表示不限制')}
                         min={0}
                         step={1}
                         onNumberChange={(value) => handleInputChange('rpm_limit', value)}
                         style={{ width: '100%' }}
-                        extraText={t('设置该渠道每分钟最大请求数，达到限制后请求将被分配到其他渠道，0 表示不限制')}
+                        extraText={t('设置该渠道每分钟最大总请求数，0 表示不限制（建议使用下方按模型限制）')}
                       />
                     </Col>
                   </Row>
+
+                  {/* 按模型 RPM 限制 */}
+                  <div style={{ marginTop: 12, marginBottom: 8 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontSize: 14, fontWeight: 500 }}>{t('按模型 RPM 限制')}</span>
+                      <Button
+                        size='small'
+                        type='tertiary'
+                        onClick={() => {
+                          const limits = { ...inputs.model_rpm_limits };
+                          limits[''] = 0;
+                          handleInputChange('model_rpm_limits', limits);
+                        }}
+                      >
+                        {t('添加模型限制')}
+                      </Button>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>
+                      {t('对指定模型设置每分钟请求限制，未设置的模型不受限制。设为 0 或留空表示不限制')}
+                    </div>
+                    {Object.entries(inputs.model_rpm_limits || {}).map(([model, rpm], index) => (
+                      <div key={index} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                        <Input
+                          value={model}
+                          placeholder={t('模型名称，如 gemini-2.5-pro')}
+                          style={{ flex: 2 }}
+                          onChange={(value) => {
+                            const limits = { ...inputs.model_rpm_limits };
+                            const oldRpm = limits[model];
+                            delete limits[model];
+                            limits[value] = oldRpm;
+                            handleInputChange('model_rpm_limits', limits);
+                          }}
+                        />
+                        <InputNumber
+                          value={rpm}
+                          placeholder={t('RPM')}
+                          min={0}
+                          step={1}
+                          style={{ flex: 1 }}
+                          onNumberChange={(value) => {
+                            const limits = { ...inputs.model_rpm_limits };
+                            limits[model] = value || 0;
+                            handleInputChange('model_rpm_limits', limits);
+                          }}
+                        />
+                        <Button
+                          size='small'
+                          type='danger'
+                          onClick={() => {
+                            const limits = { ...inputs.model_rpm_limits };
+                            delete limits[model];
+                            handleInputChange('model_rpm_limits', limits);
+                          }}
+                        >
+                          {t('删除')}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
 
                   {inputs.type === 1 && (
                     <>
