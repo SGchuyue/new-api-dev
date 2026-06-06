@@ -14,11 +14,13 @@ var channelRpmNoRedisWarnOnce sync.Once
 const channelRpmKeyPrefix = "channel_rpm:"
 
 var channelRpmLua = redis.NewScript(`
-local count = redis.call('INCR', KEYS[1])
-if count == 1 then
-    redis.call('EXPIRE', KEYS[1], 62)
+local current = tonumber(redis.call('GET', KEYS[1])) or 0
+if current >= tonumber(ARGV[1]) then
+    return 0
 end
-return count
+local new_count = redis.call('INCR', KEYS[1])
+redis.call('EXPIRE', KEYS[1], 62)
+return 1
 `)
 
 // AllowAndRecordChannelRPM 检查并记录渠道+模型的 RPM（原子操作）
@@ -41,17 +43,12 @@ func allowAndRecordChannelRPMRedis(channelId int, model string, rpmLimit int) bo
 	rdb := RDB
 	key := getChannelRpmKey(channelId, model)
 
-	count, err := channelRpmLua.Run(ctx, rdb, []string{key}).Int64()
+	result, err := channelRpmLua.Run(ctx, rdb, []string{key}, rpmLimit).Int64()
 	if err != nil {
 		SysLog(fmt.Sprintf("failed to check/increment channel rpm counter: channel_id=%d model=%s, error=%v", channelId, model, err))
 		return true
 	}
-
-	if count > int64(rpmLimit) {
-		rdb.Decr(ctx, key)
-		return false
-	}
-	return true
+	return result == 1
 }
 
 // CheckChannelRPM 检查渠道+模型的 RPM（只读，用于选渠道时预判）

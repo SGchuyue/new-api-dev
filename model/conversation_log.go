@@ -3,6 +3,8 @@ package model
 import (
 	"github.com/QuantumNous/new-api/common"
 
+	"github.com/bytedance/gopkg/util/gopool"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -17,6 +19,21 @@ type ConversationLog struct {
 	CreatedAt    int64  `json:"created_at" gorm:"bigint;index"`
 	RequestBody  string `json:"request_body" gorm:"type:longtext"`
 	ResponseBody string `json:"response_body" gorm:"type:longtext"`
+	Archived     int    `json:"archived" gorm:"type:tinyint;default:0;index"`
+}
+
+// ConversationLogMeta lightweight metadata table, stays in MySQL permanently for fast queries
+type ConversationLogMeta struct {
+	Id           int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	RequestId    string `json:"request_id" gorm:"type:varchar(64);uniqueIndex;default:''"`
+	UserId       int    `json:"user_id" gorm:"index"`
+	Username     string `json:"username" gorm:"type:varchar(64);index;default:''"`
+	ModelName    string `json:"model_name" gorm:"type:varchar(128);index;default:''"`
+	CreatedAt    int64  `json:"created_at" gorm:"bigint;index"`
+	RequestSize  int    `json:"request_size" gorm:"default:0"`
+	ResponseSize int    `json:"response_size" gorm:"default:0"`
+	IsArchived   int    `json:"is_archived" gorm:"type:tinyint;default:0;index"`
+	ArchivedAt   int64  `json:"archived_at" gorm:"bigint;default:0"`
 }
 
 // GetDecompressedRequestBody 获取解压后的请求体
@@ -51,11 +68,26 @@ func RecordConversationLog(c *gin.Context, userId int, modelName string) {
 		RequestBody:  requestBody,
 		ResponseBody: responseBody,
 	}
-	go func() {
+	gopool.Go(func() {
+		// write main record first (core data)
 		if err := SaveConversationLog(record); err != nil {
 			common.SysLog("failed to record conversation log: " + err.Error())
+			return
 		}
-	}()
+		// then write meta (auxiliary index)
+		meta := &ConversationLogMeta{
+			RequestId:    requestId,
+			UserId:       userId,
+			Username:     username,
+			ModelName:    modelName,
+			CreatedAt:    timestamp,
+			RequestSize:  len(requestBody),
+			ResponseSize: len(responseBody),
+		}
+		if err := DB.Create(meta).Error; err != nil {
+			common.SysLog("failed to record conversation log meta: " + err.Error())
+		}
+	})
 }
 
 // RecordConversationLogFromData 异步写入对话日志，不依赖 gin.Context
@@ -63,16 +95,31 @@ func RecordConversationLogFromData(userId int, modelName, requestId, username, r
 	if requestBody == "" && responseBody == "" {
 		return
 	}
+	timestamp := common.GetTimestamp()
 	record := &ConversationRecord{
 		RequestId:    requestId,
 		UserId:       userId,
 		Username:     username,
 		ModelName:    modelName,
-		CreatedAt:    common.GetTimestamp(),
+		CreatedAt:    timestamp,
 		RequestBody:  requestBody,
 		ResponseBody: responseBody,
 	}
+	// write main record first (core data), then meta (auxiliary index)
 	if err := SaveConversationLog(record); err != nil {
 		common.SysLog("failed to record conversation log: " + err.Error())
+		return
+	}
+	meta := &ConversationLogMeta{
+		RequestId:    requestId,
+		UserId:       userId,
+		Username:     username,
+		ModelName:    modelName,
+		CreatedAt:    timestamp,
+		RequestSize:  len(requestBody),
+		ResponseSize: len(responseBody),
+	}
+	if err := DB.Create(meta).Error; err != nil {
+		common.SysLog("failed to record conversation log meta: " + err.Error())
 	}
 }

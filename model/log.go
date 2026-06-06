@@ -184,12 +184,6 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
-	reqBody, respBody := c.GetString("log_request_body"), c.GetString("log_response_body")
-	if reqBody != "" || respBody != "" {
-		gopool.Go(func() {
-			RecordConversationLogFromData(userId, modelName, requestId, username, reqBody, respBody)
-		})
-	}
 }
 
 type RecordConsumeLogParams struct {

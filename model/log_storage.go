@@ -3,7 +3,7 @@ package model
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	// json operations use common.Marshal/Unmarshal
 	"fmt"
 	"time"
 
@@ -14,6 +14,7 @@ import (
 
 var minioClient *minio.Client
 var minioBucket string
+var minioPrefix string
 var minioEnabled bool
 
 // ConversationRecord 对话日志统一数据结构
@@ -51,7 +52,7 @@ func InitLogStorage() {
 	secretKey := common.GetEnvOrDefaultString("MINIO_SECRET_KEY", "")
 	useSSL := common.GetEnvOrDefaultBool("MINIO_USE_SSL", false)
 	minioBucket = common.GetEnvOrDefaultString("MINIO_BUCKET", "conversation-logs")
-
+	minioPrefix = common.GetEnvOrDefaultString("MINIO_PREFIX", "")
 	var err error
 	minioClient, err = minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(accessKey, secretKey, ""),
@@ -141,7 +142,7 @@ func getConversationLogFromMinIO(requestId string) (*ConversationRecord, error) 
 	decompressed := common.GzipDecompress(buf.String())
 
 	var record ArchiveRecord
-	if err := json.Unmarshal([]byte(decompressed), &record); err != nil {
+	if err := common.Unmarshal([]byte(decompressed), &record); err != nil {
 		return nil, fmt.Errorf("minio unmarshal failed: %w", err)
 	}
 
@@ -158,13 +159,51 @@ func getConversationLogFromMinIO(requestId string) (*ConversationRecord, error) 
 
 // getObjectKey 生成 MinIO 对象路径: YYYY/MM/DD/{request_id}.json.gz
 func getObjectKey(requestId string) string {
+	var path string
 	if len(requestId) >= 8 {
 		year := requestId[:4]
 		month := requestId[4:6]
 		day := requestId[6:8]
-		return fmt.Sprintf("%s/%s/%s/%s.json.gz", year, month, day, requestId)
+		path = fmt.Sprintf("%s/%s/%s/%s.json.gz", year, month, day, requestId)
+	} else {
+		path = fmt.Sprintf("unknown/%s.json.gz", requestId)
 	}
-	return fmt.Sprintf("unknown/%s.json.gz", requestId)
+	if minioPrefix != "" {
+		return minioPrefix + "/" + path
+	}
+	return path
+}
+
+
+// cleanupStaleArchivedRecords removes records that were marked archived but not deleted (crash recovery)
+func cleanupStaleArchivedRecords() {
+	totalCleaned := 0
+	for {
+		var staleLogs []ConversationLog
+		result := LOG_DB.Where("archived = 1").Limit(500).Find(&staleLogs)
+		if result.Error != nil || len(staleLogs) == 0 {
+			break
+		}
+		successCount := 0
+		for i := range staleLogs {
+			if err := LOG_DB.Delete(&staleLogs[i]).Error; err != nil {
+				common.SysLog(fmt.Sprintf("cleanup stale archived record failed: request_id=%s, error=%v", staleLogs[i].RequestId, err))
+			} else {
+				successCount++
+			}
+		}
+		totalCleaned += successCount
+		if successCount == 0 {
+			common.SysLog("cleanup: no progress made, stopping to avoid infinite loop")
+			break
+		}
+		if len(staleLogs) < 500 {
+			break
+		}
+	}
+	if totalCleaned > 0 {
+		common.SysLog(fmt.Sprintf("cleanup: removed %d stale archived records", totalCleaned))
+	}
 }
 
 // ArchiveOldConversationLogs 归档超过 retentionDays 天的 conversation_logs 到 MinIO
@@ -178,7 +217,7 @@ func ArchiveOldConversationLogs(retentionDays int, batchLimit int) (archived int
 	ctx := context.Background()
 
 	var logs []ConversationLog
-	err = LOG_DB.Where("created_at < ?", cutoff).
+	err = LOG_DB.Where("created_at < ? AND archived = 0", cutoff).
 		Order("id ASC").
 		Limit(batchLimit).
 		Find(&logs).Error
@@ -198,7 +237,7 @@ func ArchiveOldConversationLogs(retentionDays int, batchLimit int) (archived int
 			ResponseBody: logs[i].GetDecompressedResponseBody(),
 		}
 
-		data, err := json.Marshal(record)
+		data, err := common.Marshal(record)
 		if err != nil {
 			common.SysLog(fmt.Sprintf("archive marshal failed: request_id=%s, error=%v", logs[i].RequestId, err))
 			continue
@@ -215,14 +254,25 @@ func ArchiveOldConversationLogs(retentionDays int, batchLimit int) (archived int
 			common.SysLog(fmt.Sprintf("archive upload failed: request_id=%s, error=%v", logs[i].RequestId, err))
 			continue
 		}
-		archived++
+		// mark as archived
+		if err := LOG_DB.Model(&logs[i]).Update("archived", 1).Error; err != nil {
+			common.SysLog(fmt.Sprintf("archive mark failed: request_id=%s, error=%v", logs[i].RequestId, err))
+			continue
+		}
 
-		// 上传成功，删除 MySQL 记录
+		// update meta table
+		if err := DB.Model(&ConversationLogMeta{}).Where("request_id = ?", logs[i].RequestId).
+			Updates(map[string]interface{}{"is_archived": 1, "archived_at": time.Now().Unix()}).Error; err != nil {
+			common.SysLog(fmt.Sprintf("archive meta update failed: request_id=%s, error=%v", logs[i].RequestId, err))
+		}
+
+		// delete MySQL record
 		if err := LOG_DB.Delete(&logs[i]).Error; err != nil {
 			common.SysLog(fmt.Sprintf("archive delete failed: request_id=%s, error=%v", logs[i].RequestId, err))
 			continue
 		}
 		deleted++
+		archived++
 	}
 
 	return archived, deleted, nil

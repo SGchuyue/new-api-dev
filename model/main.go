@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -236,7 +237,9 @@ func InitLogDB() (err error) {
 		sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
 
                 InitLogStorage()
-			go startArchiveTask()
+                if common.IsMasterNode {
+                        go startArchiveTask()
+                }
 
 		if !common.IsMasterNode {
 			return nil
@@ -286,6 +289,7 @@ func migrateDB() error {
                 &PerfMetric{},
                 &UserChannelRatio{},
                 &ConversationLog{},
+                &ConversationLogMeta{},
 	)
 	if err != nil {
 		return err
@@ -337,6 +341,7 @@ func migrateDBFast() error {
                 {&PerfMetric{}, "PerfMetric"},
                 {&UserChannelRatio{}, "UserChannelRatio"},
                 {&ConversationLog{}, "ConversationLog"},
+                {&ConversationLogMeta{}, "ConversationLogMeta"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
@@ -377,6 +382,9 @@ func migrateDBFast() error {
 func migrateLOGDB() error {
 	var err error
 	if err = LOG_DB.AutoMigrate(&Log{}); err != nil {
+		return err
+	}
+	if err = LOG_DB.AutoMigrate(&ConversationLog{}); err != nil {
 		return err
 	}
 	return nil
@@ -718,6 +726,41 @@ func startArchiveTask() {
 	if !minioEnabled {
 		return
 	}
+
+	// Redis distributed lock: only one node executes archive
+	archiveLockKey := "new_api_archive_task_lock"
+	archiveLockTTL := 15 * time.Minute
+
+	refreshLock := func() {
+		if common.RedisEnabled {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			common.RDB.Expire(ctx, archiveLockKey, archiveLockTTL)
+		}
+	}
+
+	releaseLock := func() {
+		if common.RedisEnabled {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			common.RDB.Del(ctx, archiveLockKey)
+		}
+	}
+
+	tryAcquireLock := func() bool {
+		if !common.RedisEnabled {
+			return true // no Redis, allow (single node)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		success, err := common.RDB.SetNX(ctx, archiveLockKey, "1", archiveLockTTL).Result()
+		if err != nil {
+			common.SysLog(fmt.Sprintf("archive lock error: %v", err))
+			return false
+		}
+		return success
+	}
+
 	common.SysLog("archive task: started, will archive logs older than 7 days at 03:00 daily")
 	for {
 		now := time.Now()
@@ -726,6 +769,11 @@ func startArchiveTask() {
 			next = next.Add(24 * time.Hour)
 		}
 		time.Sleep(next.Sub(now))
+		if !tryAcquireLock() {
+			common.SysLog("archive task: skipped, another node is running")
+			continue
+		}
+		cleanupStaleArchivedRecords()
 		common.SysLog("archive task: starting...")
 		totalArchived := 0
 		totalDeleted := 0
@@ -740,8 +788,10 @@ func startArchiveTask() {
 			if archived == 0 {
 				break
 			}
+			refreshLock()
 			time.Sleep(1 * time.Second)
 		}
+		releaseLock()
 		common.SysLog(fmt.Sprintf("archive task: completed, archived=%d, deleted=%d", totalArchived, totalDeleted))
 	}
 }
